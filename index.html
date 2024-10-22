@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/beercss@3.7.10/dist/cdn/beer.min.css" rel="stylesheet">
+  <script type="module" src="https://cdn.jsdelivr.net/npm/beercss@3.7.10/dist/cdn/beer.min.js"></script>
+  <script type="module"
+    src="https://cdn.jsdelivr.net/npm/material-dynamic-colors@1.1.2/dist/cdn/material-dynamic-colors.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/clipboard@2.0.11/dist/clipboard.min.js"></script>
+  <link rel="icon" type="image/svg+xml" href="https://raw.githubusercontent.com/home-assistant/brands/refs/heads/master/custom_integrations/material_symbols/icon.png">
+  <title>Material Symbols Iconfinder</title>
+  <meta name="description"
+    content="Site created to assist in finding Material Symbols by Google for use in Home Assistant." />
+</head>
+
+<body>
+
+  <!-- Loading Spinner -->
+  <div id="loadingSpinner" style="height: 100vh; width: 100vw; position: absolute; z-index: 101 !important;">
+    <article class="absolute center middle max large-padding">
+      <nav class="center-align">
+        <!--<progress class="circle large"></progress>
+        <div class="small-space"></div> -->
+        <p class="no-margin no-padding max" id="loadingMessage" role="alert" aria-live="assertive">Loading icons, please
+          wait...</p>
+      </nav>
+    </article>
+  </div>
+  <div class="overlay active"></div>
+
+  <div id="toast-container" style="height: 100vh; width: 100vw; position: absolute; top: 0; left: 0;">
+    <!-- toast content will be injected here -->
+  </div>
+
+  <!-- Your header content -->
+  <header>
+    <nav class="large-padding">
+      <img class="large square" src="https://raw.githubusercontent.com/home-assistant/brands/refs/heads/master/custom_integrations/material_symbols/icon.png">
+      <div class="small-space"></div>
+      <div class="max left-align">
+        <h5 class="no-padding no-margin">Icon Finder</h5>
+        <p class="no-padding no-margin secondary-text">Material Symbols for Home Assistant</p>
+      </div>
+    </nav>
+  </header>
+
+  <main id="mainContent" style="display: none; padding: 3rem !important">
+    <!-- Search Bar -->
+    <nav class="middle-align center-align transparent max">
+      <div class="responsive">
+        <nav class="no-space max">
+          <div class="max field border left-round">
+            <input id="search" class="input" type="text" autofocus>
+          </div>
+          <button class="large right-round"><i>search</i>Search</button>
+        </nav>
+      </div>
+    </nav>
+
+    <div class="medium-space"></div>
+
+    <!-- Results Title -->
+    <h2 class="title" style="display: block;" id="results_title">Search Results</h2>
+    <p id="no-query-message">Please enter a search term to find icons.</p>
+
+    <!-- Results Container -->
+    <div class="grid max center-align space" style="display: grid;" id="results">
+      <!-- Search results will be injected here -->
+    </div>
+
+  </main>
+
+  <nav class="bottom" style="z-index: 99 !important;">
+    <div class="content has-text-right">
+      <p id="version">Based on Material Symbols</p>
+    </div>
+  </nav>
+
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2/dist/fuse.min.js"></script>
+
+  <script>
+    // Define variables and constants
+    let iconData = {}; // To store all icons data
+    let allIcons = [];
+    let fuse;
+    const resultsContainer = document.getElementById('results');
+    const searchInput = document.getElementById('search');
+    const debounceDelay = 300; // milliseconds
+    let debounceTimer;
+
+    // Get references to the spinner and main content
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const overlay = document.querySelector('.overlay');
+    const mainContent = document.getElementById('mainContent');
+
+    // Function to load icon data
+    async function loadIconData() {
+      // Show the spinner
+      showLoadingSpinner();
+
+      // Try loading from localStorage
+      if (loadIconDataFromLocalStorage()) {
+        buildIconList();
+        initializeFuse();
+        displayVersion();
+        // Hide the spinner and show main content
+        hideLoadingSpinner();
+        return;
+      }
+
+      // Fetch the material-symbols.json file
+      await fetch('json/material-symbols.json')
+        .then(response => response.json())
+        .then(data => {
+          iconData = data;
+          saveIconDataToLocalStorage();
+          buildIconList();
+          initializeFuse();
+          displayVersion();
+          // Hide the spinner and show main content
+          hideLoadingSpinner();
+        })
+        .catch(error => {
+          console.error('Error fetching material-symbols.json:', error);
+          // You might want to display an error message to the user
+          loadingSpinner.innerHTML = '<p>Error loading data. Please try again later.</p>';
+        });
+    }
+
+    function saveIconDataToLocalStorage() {
+      try {
+        localStorage.setItem('iconData', JSON.stringify(iconData));
+      } catch (e) {
+        console.warn('LocalStorage quota exceeded, cannot save icon data.');
+      }
+    }
+
+    function loadIconDataFromLocalStorage() {
+      const data = localStorage.getItem('iconData');
+      if (data) {
+        iconData = JSON.parse(data);
+        return true;
+      }
+      return false;
+    }
+
+    // Show the loading spinner and hide main content
+    function showLoadingSpinner() {
+      loadingSpinner.style.display = 'flex';
+      mainContent.style.display = 'none';
+    }
+
+    // Update the loading message during different stages
+    const loadingMessage = document.getElementById('loadingMessage');
+    function updateLoadingMessage(message) {
+      if (loadingMessage) {
+        loadingMessage.textContent = message;
+      }
+    }
+
+    // Hide the loading spinner and show main content
+    function hideLoadingSpinner() {
+      loadingSpinner.style.display = 'none';
+      overlay.style.display = 'none';
+      mainContent.style.display = 'block';
+    }
+
+    // Function to build the icon list for searching
+    function buildIconList() {
+      allIcons = [];
+      const icons = iconData.icons || {};
+
+      for (const [iconName, iconInfo] of Object.entries(icons)) {
+        const { prefixedName, displayName } = processIconName(iconName);
+        const iconEntry = {
+          name: iconName,
+          displayName: displayName,
+          prefixedName: prefixedName,
+          body: iconInfo.body,
+          categories: getIconCategories(iconName),
+          aliases: getIconAliases(iconName),
+        };
+        allIcons.push(iconEntry);
+      }
+    }
+
+    function getIconCategories(iconName) {
+      const categories = [];
+      const categoryData = iconData.categories || {};
+      for (const [categoryName, iconList] of Object.entries(categoryData)) {
+        if (iconList.includes(iconName)) {
+          categories.push(categoryName);
+        }
+      }
+      return categories;
+    }
+
+    function getIconAliases(iconName) {
+      const aliases = [];
+      const aliasData = iconData.aliases || {};
+      for (const [aliasName, aliasInfo] of Object.entries(aliasData)) {
+        if (aliasInfo.parent === iconName) {
+          aliases.push(aliasName);
+        }
+      }
+      return aliases;
+    }
+
+    // Function to process icon names according to your rules
+    function processIconName(iconName) {
+      let prefix = '';
+      let displayName = iconName;
+
+      if (iconName.endsWith('-outline-rounded')) {
+        prefix = 'm3r:';
+        displayName = iconName.slice(0, -16); // Remove '-outline-rounded'
+      } else if (iconName.endsWith('-outline-sharp')) {
+        prefix = 'm3s:';
+        displayName = iconName.slice(0, -14); // Remove '-outline-sharp'
+      } else if (iconName.endsWith('-rounded')) {
+        prefix = 'm3rf:';
+        displayName = iconName.slice(0, -8); // Remove '-rounded'
+      } else if (iconName.endsWith('-sharp')) {
+        prefix = 'm3sf:';
+        displayName = iconName.slice(0, -6); // Remove '-sharp'
+      } else if (iconName.endsWith('-outline')) {
+        prefix = 'm3o:';
+        displayName = iconName.slice(0, -8); // Remove '-outline'
+      } else {
+        prefix = 'm3of:';
+        // displayName remains the same
+      }
+
+      return {
+        prefixedName: prefix + displayName,
+        displayName: displayName
+      };
+    }
+
+    // Function to display the version based on lastModified
+    function displayVersion() {
+      if (iconData.lastModified) {
+        const timestamp = iconData.lastModified * 1000; // Convert to milliseconds
+        const date = new Date(timestamp);
+        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        const versionString = date.toLocaleDateString('en-us', { year: 'numeric', month: '2-digit', day: '2-digit' }).
+          replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2');
+        const versionElement = document.getElementById('version');
+        if (versionElement) {
+          versionElement.textContent = `Based on Material Symbols import from ${versionString}`;
+        }
+      }
+    }
+
+    // Initialize Fuse.js with the icon data
+    function initializeFuse() {
+      const options = {
+        keys: [
+          'displayName',   // Search using displayName instead of name
+          'aliases',
+          'categories',
+        ],
+        threshold: 0.1,    // Set threshold to 0.1 for more precise matching
+        includeScore: true,
+      };
+      fuse = new Fuse(allIcons, options);
+    }
+
+    // Function to perform the search
+    function performSearch(query) {
+      clearResults();
+
+      // Get a reference to the "no-query-message" element
+      const noQueryMessage = document.getElementById('no-query-message');
+
+      if (!query) {
+        // Display the "no-query-message" if no query is provided
+        noQueryMessage.style.display = 'block';
+        return;
+      } else {
+        // Hide the "no-query-message" when a search is being performed
+        noQueryMessage.style.display = 'none';
+      }
+
+      const results = fuse.search(query);
+
+      if (results.length === 0) {
+        // If no results found, display a message
+        const noResultsMessage = document.createElement('p');
+        noResultsMessage.textContent = 'No icons found.';
+        resultsContainer.appendChild(noResultsMessage);
+        return;
+      }
+
+      const iconsToDisplay = results.slice(0, 100).map(result => result.item); // Adjust the number as needed
+      displayResults(iconsToDisplay);
+    }
+
+    // Function to clear previous search results
+    function clearResults() {
+      resultsContainer.innerHTML = '';
+    }
+
+    // Function to display the search results
+    function displayResults(icons) {
+      const fragment = document.createDocumentFragment();
+
+      icons.forEach((icon) => {
+        const article = document.createElement('article');
+        article.classList.add('round', 's6', 'm4', 'l3', 'wave');
+
+        // Create an SVG element using the icon's body
+        const svgElement = `
+          <svg class="large" style="color: var(--primary)" viewBox="0 0 ${iconData.width} ${iconData.height}" xmlns="http://www.w3.org/2000/svg">
+            ${icon.body}
+          </svg>
+        `;
+
+        // Get categories as a comma-separated string
+        const categoriesText = icon.categories.length > 0 ? icon.categories.join(', ') : 'Uncategorized';
+
+        // Add data-clipboard-text attribute
+        article.setAttribute('data-clipboard-text', icon.prefixedName);
+
+        article.innerHTML = `
+          <div class="tiny-space"></div>
+          ${svgElement}
+          <div>
+            <h5 class="small wrap padding" style="word-break: break-all;">${icon.prefixedName}</h5>
+          </div>
+        `;
+
+        fragment.appendChild(article);
+      });
+
+      resultsContainer.appendChild(fragment);
+    }
+
+    // Event listener with debouncing for the search input
+    searchInput.addEventListener('input', function () {
+      clearTimeout(debounceTimer);
+      const query = this.value.trim().toLowerCase();
+      debounceTimer = setTimeout(() => {
+        performSearch(query);
+      }, debounceDelay);
+    });
+
+    function showToast(message) {
+      // Create a toast element
+      const toastContainer = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.classList.add('toast');
+      toast.textContent = message;
+
+      // Add styling for the toast
+      toast.style.display = 'block';
+      toast.style.position = 'fixed';
+      toast.style.inset = 'auto auto 6rem 50%';
+      toast.style.inlineSize = '40%';
+      toast.style.blockSize = 'auto';
+      toast.style.zIndex = '200';
+      toast.style.display = 'flex';
+      toast.style.boxShadow = 'var(--elevate2)';
+      toast.style.padding = '1rem';
+      toast.style.cursor = 'pointer';
+      toast.style.justifyContent = 'center';
+      toast.style.textAlign = 'center';
+      toast.style.alignItems = 'center';
+      toast.style.borderRadius = '.25rem';
+      toast.style.gap = '.5rem';
+      toast.style.transition = 'all var(--speed2)';
+      toast.style.opacity = '0';
+      toast.style.backgroundColor = 'var(--primary) !important';
+      toast.style.color = 'var(--on-primary) !important';
+      toast.style.visibility = 'hidden';
+      toast.style.transform = 'translate(-50%, 0%)';
+
+      // Append the toast to the toast container
+      toastContainer.appendChild(toast);
+
+      // Show the toast with a slight delay for the CSS transition
+      setTimeout(() => {
+        toast.style.opacity = '1';
+        toast.style.visibility = 'visible';
+        toast.style.transform = 'translate(-50%, -50%)';
+      }, 50);
+
+      // Remove the toast after 5 seconds
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.visibility = 'hidden';
+        setTimeout(() => {
+          if (toastContainer.contains(toast)) {
+            toastContainer.removeChild(toast);
+          }
+        }, 300);
+      }, 30000);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      // Initialise Clipboard.js on articles
+      const clipboard = new ClipboardJS('article', {
+        target: function (trigger) {
+          return trigger;
+        }
+      });
+
+      // On copy success, show toast
+      clipboard.on('success', function (e) {
+        // Show the toast with the copied text
+        showToast(`"${e.text}" has been copied to your clipboard`);
+        e.clearSelection();
+      });
+
+      // Optional: Error feedback
+      clipboard.on('error', function (e) {
+        console.error('Copy failed:', e.action);
+      });
+    });
+
+    // Initialize the app on page load
+    loadIconData();
+  </script>
+
+</body>
+
+</html>
