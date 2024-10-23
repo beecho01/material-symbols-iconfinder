@@ -249,7 +249,7 @@
           replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2');
         const versionElement = document.getElementById('version');
         if (versionElement) {
-          versionElement.textContent = `Based on Material Symbols import from ${versionString}`;
+          versionElement.textContent = `Based on Material Symbols JSON provided by iconfiy. Import from ${versionString}`;
         }
       }
     }
@@ -313,7 +313,7 @@
 
         // Create an SVG element using the icon's body
         const svgElement = `
-          <svg class="large" style="color: var(--primary)" viewBox="0 0 ${iconData.width} ${iconData.height}" xmlns="http://www.w3.org/2000/svg">
+          <svg class="large" style="color: var(--primary); border-radius: 0px;" viewBox="0 0 ${iconData.width} ${iconData.height}" xmlns="http://www.w3.org/2000/svg">
             ${icon.body}
           </svg>
         `;
