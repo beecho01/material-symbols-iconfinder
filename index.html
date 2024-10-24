@@ -73,8 +73,9 @@
   </main>
 
   <nav class="bottom" style="z-index: 99 !important;">
-    <div class="content has-text-right">
-      <p id="version">Based on Material Symbols</p>
+    <div class="content responsive">
+      <p id="version-small" class="s small-text">Based on Material Symbols</p>
+      <p id="version-medium-large" class="m l">Based on Material Symbols</p>
     </div>
   </nav>
 
@@ -247,10 +248,10 @@
         const options = { year: 'numeric', month: 'long', day: 'numeric' };
         const versionString = date.toLocaleDateString('en-us', { year: 'numeric', month: '2-digit', day: '2-digit' }).
           replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2');
-        const versionElement = document.getElementById('version');
-        if (versionElement) {
-          versionElement.textContent = `Based on Material Symbols JSON provided by iconfiy. Import from ${versionString}`;
-        }
+        const versionElementSmall = document.getElementById('version-small');
+        const versionElementMediumLarge = document.getElementById('version-medium-large');
+        versionElementSmall.innerHTML = `Based on Material Symbols JSON provided by <a class="link" href="https://github.com/iconify/icon-sets">iconfiy</a>. Import from ${versionString}.`;
+        versionElementMediumLarge.innerHTML = `Based on Material Symbols JSON provided by <a class="link" href="https://github.com/iconify/icon-sets">iconfiy</a>. Import from ${versionString}.`;
       }
     }
 
