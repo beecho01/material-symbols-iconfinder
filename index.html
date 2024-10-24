@@ -9,7 +9,8 @@
   <script type="module"
     src="https://cdn.jsdelivr.net/npm/material-dynamic-colors@1.1.2/dist/cdn/material-dynamic-colors.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/clipboard@2.0.11/dist/clipboard.min.js"></script>
-  <link rel="icon" type="image/svg+xml" href="https://raw.githubusercontent.com/home-assistant/brands/refs/heads/master/custom_integrations/material_symbols/icon.png">
+  <link rel="icon" type="image/svg+xml"
+    href="https://raw.githubusercontent.com/home-assistant/brands/refs/heads/master/custom_integrations/material_symbols/icon.png">
   <title>Material Symbols Iconfinder</title>
   <meta name="description"
     content="Site created to assist in finding Material Symbols by Google for use in Home Assistant." />
@@ -37,11 +38,18 @@
   <!-- Your header content -->
   <header>
     <nav class="large-padding">
-      <img class="large square" src="https://raw.githubusercontent.com/home-assistant/brands/refs/heads/master/custom_integrations/material_symbols/icon.png">
+      <img class="large square"
+        src="https://raw.githubusercontent.com/home-assistant/brands/refs/heads/master/custom_integrations/material_symbols/icon.png">
       <div class="small-space"></div>
       <div class="max left-align">
         <h5 class="no-padding no-margin">Icon Finder</h5>
         <p class="no-padding no-margin secondary-text">Material Symbols for Home Assistant</p>
+      </div>
+      <!-- Dark Mode Toggle -->
+      <div class="row">
+        <button class="transparent circle" onclick="updateTheme()">
+          <i id="btnThemeToggle" class="active">light_mode</i>
+        </button>
       </div>
     </nav>
   </header>
@@ -95,6 +103,49 @@
     const loadingSpinner = document.getElementById('loadingSpinner');
     const overlay = document.querySelector('.overlay');
     const mainContent = document.getElementById('mainContent');
+
+    const updateTheme = () => {
+      // Toggle the 'dark' class on the body
+      document.body.classList.toggle('dark');
+
+      // Update the icon based on the presence of the 'dark' class
+      const btnThemeToggle = document.getElementById("btnThemeToggle");
+
+      if (document.body.classList.contains('dark')) {
+        btnThemeToggle.innerText = 'dark_mode';
+        // Save the user's preference
+        localStorage.setItem('theme', 'dark');
+      } else {
+        btnThemeToggle.innerText = 'light_mode';
+        localStorage.setItem('theme', 'light');
+      }
+    };
+
+    const setInitialTheme = () => {
+      const btnThemeToggle = document.getElementById("btnThemeToggle");
+
+      // Check if user has a saved preference
+      const savedTheme = localStorage.getItem('theme');
+
+      if (savedTheme) {
+        // Use the saved theme
+        document.body.classList.toggle('dark', savedTheme === 'dark');
+      } else {
+        // No saved preference, use system preference
+        const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)");
+        document.body.classList.toggle('dark', prefersDarkScheme.matches);
+      }
+
+      // Set the icon accordingly
+      if (document.body.classList.contains('dark')) {
+        btnThemeToggle.innerText = document.body.classList.contains('dark') ? 'dark_mode' : 'light_mode';
+      }
+    };
+
+    // Call setInitialTheme on page load
+    document.addEventListener('DOMContentLoaded', function () {
+      setInitialTheme();
+    });
 
     // Function to load icon data
     async function loadIconData() {
