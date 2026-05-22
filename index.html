@@ -18,6 +18,12 @@
     body {
       font-family: 'Open Sans', sans-serif !important;
     }
+
+    #welcomeArticle .dismiss-btn {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+    }
   </style>
   </head>
 
@@ -46,8 +52,9 @@
         src="https://raw.githubusercontent.com/home-assistant/brands/refs/heads/master/custom_integrations/material_symbols/icon.png">
       <div class="small-space"></div>
       <div class="max left-align">
-        <h5 class="no-padding no-margin">Icon Finder</h5>
-        <p class="no-padding no-margin secondary-text">Material Symbols for Home Assistant</p>
+        <h5 class="no-padding no-margin header-title m l">Icon Finder</h5>
+        <h6 class="no-padding no-margin header-title s">Icon Finder</h6>
+        <p class="no-padding no-margin secondary-text m l">Material Symbols for Home Assistant</p>
       </div>
       <!-- GitHub Link -->
       <div>
@@ -72,15 +79,16 @@
   </header>
 
   <main id="mainContent" style="display: none; padding: 3rem !important">
-    <article class="large-padding fill">
-      <h4 class="small">Welcome to the Material Symbols Icon Finder for Home Assistant!</h4>
+    <article id="welcomeArticle" class="large-padding fill no-line" style="position: relative;">
+      <button class="dismiss-btn small transparent circle" onclick="dismissWelcome()" title="Dismiss"><i>close</i></button>
+      <h5 class="small bold">Welcome to the Material Symbols Icon Finder for Home Assistant!</h5>
       <p>To get started, ensure you've installed the <a class="link"
           href="https://github.com/beecho01/material-symbols">Material Symbols</a> integration on your Home Assistant
         instance.</p>
       <p>Once you're set, just search for an icon by name or category. See one you like? Just click to copy the icon
         code, then paste it directly into your configuration!</p>
     </article>
-    <div class="medium-space"></div>
+    <div id="welcomeSpacer" class="medium-space"></div>
 
     <!-- Search Bar -->
     <nav class="middle-align center-align transparent max">
@@ -109,9 +117,9 @@
   </main>
 
   <nav class="bottom" style="z-index: 99 !important;">
-    <div class="content responsive">
-      <p id="version-small" class="s small-text" style="color: var(--outline) !important;">Based on Material Symbols JSON provided by <a class="link" href="https://github.com/iconify/icon-sets">iconfiy</a>.</p>
-      <p id="version-medium-large" class="m l" style="color: var(--outline) !important;">Based on Material Symbols JSON provided by <a class="link" href="https://github.com/iconify/icon-sets">iconfiy</a>.</p>
+    <div class="content responsive no-line">
+      <p id="version-small" class="s small-text" style="color: var(--outline) !important;">Based on Material Symbols integration data from <a class="link" href="https://github.com/beecho01/material-symbols">beecho01/material-symbols</a>.</p>
+      <p id="version-medium-large" class="m l" style="color: var(--outline) !important;">Based on Material Symbols integration data from <a class="link" href="https://github.com/beecho01/material-symbols">beecho01/material-symbols</a>.</p>
     </div>
   </nav>
 
@@ -119,7 +127,6 @@
 
   <script>
     // Define variables and constants
-    let iconData = {}; // To store all icons data
     let allIcons = [];
     let fuse;
     const resultsContainer = document.getElementById('results');
@@ -127,10 +134,43 @@
     const debounceDelay = 300; // milliseconds
     let debounceTimer;
 
+    // SVG cache for on-demand fetching
+    const svgCache = {};
+
+    // GitHub raw URLs for the material-symbols integration data
+    const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/beecho01/material-symbols/main/custom_components/material_symbols/data';
+    const ICON_SETS = {
+      'm3o':  { prefix: 'm3o:',  suffix: '-outline' },
+      'm3of': { prefix: 'm3of:', suffix: '' },           // default (filled, no suffix)
+      'm3r':  { prefix: 'm3r:',  suffix: '-outline-rounded' },
+      'm3rf': { prefix: 'm3rf:', suffix: '-rounded' },
+      'm3s':  { prefix: 'm3s:',  suffix: '-outline-sharp' },
+      'm3sf': { prefix: 'm3sf:', suffix: '-sharp' }
+    };
+
     // Get references to the spinner and main content
     const loadingSpinner = document.getElementById('loadingSpinner');
     const overlay = document.querySelector('.overlay');
     const mainContent = document.getElementById('mainContent');
+
+    // Dismiss the welcome article and remember the choice
+    const dismissWelcome = () => {
+      const welcomeArticle = document.getElementById('welcomeArticle');
+      const welcomeSpacer = document.getElementById('welcomeSpacer');
+      if (welcomeArticle) welcomeArticle.style.display = 'none';
+      if (welcomeSpacer) welcomeSpacer.style.display = 'none';
+      sessionStorage.setItem('welcomeDismissed', 'true');
+    };
+
+    // Check if welcome was previously dismissed
+    const checkWelcomeDismissed = () => {
+      if (sessionStorage.getItem('welcomeDismissed') === 'true') {
+        const welcomeArticle = document.getElementById('welcomeArticle');
+        const welcomeSpacer = document.getElementById('welcomeSpacer');
+        if (welcomeArticle) welcomeArticle.style.display = 'none';
+        if (welcomeSpacer) welcomeSpacer.style.display = 'none';
+      }
+    };
 
     const updateTheme = () => {
       // Toggle the 'dark' class on the body
@@ -173,57 +213,68 @@
     // Call setInitialTheme on page load
     document.addEventListener('DOMContentLoaded', function () {
       setInitialTheme();
+      checkWelcomeDismissed();
     });
 
-    // Function to load icon data
+    // Function to load icon data from GitHub
     async function loadIconData() {
       // Show the spinner
       showLoadingSpinner();
+      updateLoadingMessage('Loading icons, please wait...');
 
-      // Try loading from localStorage
-      if (loadIconDataFromLocalStorage()) {
-        buildIconList();
+      try {
+        // Fetch all 6 icons.json files concurrently
+        const setNames = Object.keys(ICON_SETS);
+        const fetchPromises = setNames.map(async (setName) => {
+          try {
+            const response = await fetch(`${GITHUB_RAW_BASE}/${setName}/icons.json`);
+            if (!response.ok) throw new Error(`HTTP ${response.status} for ${setName}/icons.json`);
+            const data = await response.json();
+            return { setName, data };
+          } catch (err) {
+            console.warn(`Failed to load icons for ${setName}:`, err);
+            return { setName, data: [] };
+          }
+        });
+
+        const results = await Promise.all(fetchPromises);
+
+        // Build the icon list from the fetched data
+        buildIconList(results);
         initializeFuse();
-        displayVersion();
+
+        // Fetch and display version info
+        await displayVersion();
+
         // Hide the spinner and show main content
         hideLoadingSpinner();
-        return;
-      }
-
-      // Fetch the material-symbols.json file
-      await fetch('json/material-symbols.json')
-        .then(response => response.json())
-        .then(data => {
-          iconData = data;
-          saveIconDataToLocalStorage();
-          buildIconList();
-          initializeFuse();
-          displayVersion();
-          // Hide the spinner and show main content
-          hideLoadingSpinner();
-        })
-        .catch(error => {
-          console.error('Error fetching material-symbols.json:', error);
-          // You might want to display an error message to the user
-          loadingSpinner.innerHTML = '<p>Error loading data. Please try again later.</p>';
-        });
-    }
-
-    function saveIconDataToLocalStorage() {
-      try {
-        localStorage.setItem('iconData', JSON.stringify(iconData));
-      } catch (e) {
-        console.warn('LocalStorage quota exceeded, cannot save icon data.');
+      } catch (error) {
+        console.error('Error loading icon data:', error);
+        loadingSpinner.innerHTML = '<p>Error loading data. Please try again later.</p>';
       }
     }
 
-    function loadIconDataFromLocalStorage() {
-      const data = localStorage.getItem('iconData');
-      if (data) {
-        iconData = JSON.parse(data);
-        return true;
+    // Function to build the icon list from fetched data
+    function buildIconList(fetchResults) {
+      allIcons = [];
+
+      for (const { setName, data } of fetchResults) {
+        const setConfig = ICON_SETS[setName];
+        if (!data || !Array.isArray(data)) continue;
+
+        for (const iconObj of data) {
+          const baseName = iconObj.name;
+          const prefixedName = setConfig.prefix + baseName;
+
+          allIcons.push({
+            name: baseName,
+            displayName: baseName,
+            prefixedName: prefixedName,
+            setName: setName,
+            suffix: setConfig.suffix,
+          });
+        }
       }
-      return false;
     }
 
     // Show the loading spinner and hide main content
@@ -247,90 +298,20 @@
       mainContent.style.display = 'block';
     }
 
-    // Function to build the icon list for searching
-    function buildIconList() {
-      allIcons = [];
-      const icons = iconData.icons || {};
-
-      for (const [iconName, iconInfo] of Object.entries(icons)) {
-        const { prefixedName, displayName } = processIconName(iconName);
-        const iconEntry = {
-          name: iconName,
-          displayName: displayName,
-          prefixedName: prefixedName,
-          body: iconInfo.body,
-          categories: getIconCategories(iconName),
-          aliases: getIconAliases(iconName),
-        };
-        allIcons.push(iconEntry);
-      }
-    }
-
-    function getIconCategories(iconName) {
-      const categories = [];
-      const categoryData = iconData.categories || {};
-      for (const [categoryName, iconList] of Object.entries(categoryData)) {
-        if (iconList.includes(iconName)) {
-          categories.push(categoryName);
+    // Function to display the version based on manifest.json from the repo
+    async function displayVersion() {
+      try {
+        const response = await fetch(`${GITHUB_RAW_BASE.replace('/data', '')}/manifest.json`);
+        if (response.ok) {
+          const manifest = await response.json();
+          const version = manifest.version || 'unknown';
+          const versionElementSmall = document.getElementById('version-small');
+          const versionElementMediumLarge = document.getElementById('version-medium-large');
+          versionElementSmall.innerHTML = `Based on Material Symbols integration data from <a class="link" href="https://github.com/beecho01/material-symbols">beecho01/material-symbols</a>.<p style="margin-block-start: 0 !important;">Version ${version}.</p>`;
+          versionElementMediumLarge.innerHTML = `Based on Material Symbols integration data from <a class="link" href="https://github.com/beecho01/material-symbols">beecho01/material-symbols</a>.<p style="margin-block-start: 0 !important;">Version ${version}.</p>`;
         }
-      }
-      return categories;
-    }
-
-    function getIconAliases(iconName) {
-      const aliases = [];
-      const aliasData = iconData.aliases || {};
-      for (const [aliasName, aliasInfo] of Object.entries(aliasData)) {
-        if (aliasInfo.parent === iconName) {
-          aliases.push(aliasName);
-        }
-      }
-      return aliases;
-    }
-
-    // Function to process icon names according to your rules
-    function processIconName(iconName) {
-      let prefix = '';
-      let displayName = iconName;
-
-      if (iconName.endsWith('-outline-rounded')) {
-        prefix = 'm3r:';
-        displayName = iconName.slice(0, -16); // Remove '-outline-rounded'
-      } else if (iconName.endsWith('-outline-sharp')) {
-        prefix = 'm3s:';
-        displayName = iconName.slice(0, -14); // Remove '-outline-sharp'
-      } else if (iconName.endsWith('-rounded')) {
-        prefix = 'm3rf:';
-        displayName = iconName.slice(0, -8); // Remove '-rounded'
-      } else if (iconName.endsWith('-sharp')) {
-        prefix = 'm3sf:';
-        displayName = iconName.slice(0, -6); // Remove '-sharp'
-      } else if (iconName.endsWith('-outline')) {
-        prefix = 'm3o:';
-        displayName = iconName.slice(0, -8); // Remove '-outline'
-      } else {
-        prefix = 'm3of:';
-        // displayName remains the same
-      }
-
-      return {
-        prefixedName: prefix + displayName,
-        displayName: displayName
-      };
-    }
-
-    // Function to display the version based on lastModified
-    function displayVersion() {
-      if (iconData.lastModified) {
-        const timestamp = iconData.lastModified * 1000; // Convert to milliseconds
-        const date = new Date(timestamp);
-        const options = { year: 'numeric', month: 'long', day: 'numeric' };
-        const versionString = date.toLocaleDateString('en-us', { year: 'numeric', month: '2-digit', day: '2-digit' }).
-          replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2');
-        const versionElementSmall = document.getElementById('version-small');
-        const versionElementMediumLarge = document.getElementById('version-medium-large');
-        versionElementSmall.innerHTML = `Based on Material Symbols JSON provided by <a class="link" href="https://github.com/iconify/icon-sets">iconfiy</a>.<p style="margin-block-start: 0 !important;">Imported from ${versionString} release.</p>`;
-        versionElementMediumLarge.innerHTML = `Based on Material Symbols JSON provided by <a class="link" href="https://github.com/iconify/icon-sets">iconfiy</a>.<p style="margin-block-start: 0 !important;">Imported from ${versionString} release.</p>`;
+      } catch (error) {
+        console.warn('Could not fetch version info:', error);
       }
     }
 
@@ -339,8 +320,8 @@
       const options = {
         keys: [
           'displayName',
-          'aliases',
-          'categories',
+          'prefixedName',
+          'setName',
         ],
         threshold: 0.1,    // Set threshold to 0.1 for more precise matching
         includeScore: true,
@@ -393,15 +374,13 @@
         const article = document.createElement('article');
         article.classList.add('round', 's6', 'm4', 'l3', 'wave');
 
-        // Create an SVG element using the icon's body
+        // Create a placeholder SVG that will be filled in on demand
+        const svgId = `svg-${icon.setName}-${icon.name}`;
         const svgElement = `
-          <svg class="large" style="color: var(--primary); border-radius: 0px;" viewBox="0 0 ${iconData.width} ${iconData.height}" xmlns="http://www.w3.org/2000/svg">
-            ${icon.body}
+          <svg id="${svgId}" class="large" style="color: var(--primary); border-radius: 0px;" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3"/>
           </svg>
         `;
-
-        // Get categories as a comma-separated string
-        const categoriesText = icon.categories.length > 0 ? icon.categories.join(', ') : 'Uncategorized';
 
         // Add data-clipboard-text attribute
         article.setAttribute('data-clipboard-text', icon.prefixedName);
@@ -415,9 +394,52 @@
         `;
 
         fragment.appendChild(article);
+
+        // Fetch the SVG on demand and cache it
+        fetchSvgIcon(icon.setName, icon.name, svgId);
       });
 
       resultsContainer.appendChild(fragment);
+    }
+
+    // Function to fetch an SVG icon on demand and inject it into the DOM
+    async function fetchSvgIcon(setName, iconName, svgId) {
+      const cacheKey = `${setName}:${iconName}`;
+
+      // Check cache first
+      if (svgCache[cacheKey]) {
+        injectSvgContent(svgId, svgCache[cacheKey]);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${GITHUB_RAW_BASE}/${setName}/${iconName}.svg`);
+        if (!response.ok) return;
+        const svgText = await response.text();
+
+        // Extract the inner content from the SVG
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(svgText, 'image/svg+xml');
+        const svgEl = doc.querySelector('svg');
+        if (!svgEl) return;
+
+        // Get inner HTML (paths, circles, etc.)
+        const innerContent = svgEl.innerHTML;
+
+        // Cache the result
+        svgCache[cacheKey] = innerContent;
+        injectSvgContent(svgId, innerContent);
+      } catch (error) {
+        console.warn(`Failed to fetch SVG for ${setName}:${iconName}`, error);
+      }
+    }
+
+    // Function to inject SVG content into a placeholder element
+    function injectSvgContent(svgId, content) {
+      const svgElement = document.getElementById(svgId);
+      if (svgElement) {
+        svgElement.innerHTML = content;
+      }
     }
 
     // Event listener with debouncing for the search input
